@@ -33,8 +33,10 @@ function extractFieldPaths(obj, prefix = '') {
  * @returns {Promise<string[]>} List of field paths.
  */
 export async function getQuickBooksFields({ realmId, accessToken, entity }) {
-  //const temp = `eyJhbGciOiJkaXIiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2IiwieC5vcmciOiJIMCJ9..DhNEPfH3C0iCuOpspSCKOw.t3Hg5FqOZF2Yt3-UEnMCkGk6jWAGhAnGgnoaKVlwvmHbfpvXAj8aB7GiVFKqXmSYCt0LenUU8hqVvcgyCS2fPIkueB7clvIJZGtLUdEuSecNB1fpnQyEgdvwFVhBwXX0rJROo3GLW_Y_ziBRfPRN2EBo1AEN6F66k37KBBgodO49Y4Hhr9WGBeIkYe4iqf8fB3wvhYkhwTXxh0mJnKpMszjf2vZFSIUBwoYlC1dLBxETVXFSIfnZXBAkhakEzfq-zk9AySQDqr-3JJM47gkV5JR_axSPqySl8deMQ0HuXKaCqpvHPgCUfcA3sm-S1yltJ-aGRqWRrJnMmYzjEydYJPs4wUZnFaRCatdnMOBvwITHnIOxefSAx9dthUxHTXtp8DLrrrjO6khK5LhHkC4EOoKwGCVF3J2hbBIqRCF8s3FfisYWgejw7mSKd9hIlyXcFZdOIcZDLjstajxzebmfQsrm8ZNzVsaTysO5g42iIJE.MMn5fz_-6XM5DLQjZ3gmWg`
-  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=SELECT * FROM ${entity}`;
+  // URL encode the query parameter - QuickBooks API requires this
+  const query = encodeURIComponent(`SELECT * FROM ${entity}`);
+  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=${query}`;
+  
   const res = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -42,10 +44,32 @@ export async function getQuickBooksFields({ realmId, accessToken, entity }) {
       'Content-Type': 'application/json',
     },
   });
+  
   if (!res.ok) {
-    throw new Error(`QuickBooks API error: ${res.status} ${res.statusText}`);
+    // Try to get more details from the error response
+    let errorDetails = `${res.status} ${res.statusText}`;
+    try {
+      const errorData = await res.json();
+      if (errorData.Fault) {
+        errorDetails = errorData.Fault.Error?.[0]?.Message || errorDetails;
+        if (errorData.Fault.Error?.[0]?.Detail) {
+          errorDetails += `: ${errorData.Fault.Error[0].Detail}`;
+        }
+      }
+    } catch (e) {
+      // If we can't parse the error response, use the status text
+    }
+    throw new Error(`QuickBooks API error: ${errorDetails}`);
   }
+  
   const data = await res.json();
+  
+  // Check for QuickBooks API errors in the response
+  if (data.Fault) {
+    const faultMessage = data.Fault.Error?.[0]?.Message || 'Unknown QuickBooks API error';
+    throw new Error(`QuickBooks API error: ${faultMessage}`);
+  }
+  
   // The entity records are in data[entity] or data.QueryResponse[entity]
   const records = data.QueryResponse && data.QueryResponse[entity];
   if (!records || !records.length) {

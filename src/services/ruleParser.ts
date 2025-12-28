@@ -2,7 +2,7 @@ import { ConversionResult } from '../types/audit';
 import { apiClient } from './apiClient';
 
 export class RuleParser {
-  static async parseInstruction(instruction: string, realmId: string, accessToken: string, entity: string): Promise<ConversionResult> {
+  static async parseInstruction(instruction: string, realmId: string, accessToken: string | null, entity: string): Promise<ConversionResult> {
     if (!instruction.trim()) {
       return {
         success: false,
@@ -16,10 +16,12 @@ export class RuleParser {
       return response;
     } catch (error) {
       console.error('Rule parsing error:', error);
+      // Preserve suggestions from the backend error response if available
+      const errorWithSuggestions = error as Error & { suggestions?: string[] };
       return {
         success: false,
         error: `Failed to parse instruction: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        suggestions: [
+        suggestions: errorWithSuggestions.suggestions || [
           'Check your internet connection',
           'Verify the backend server is running',
           'Try simplifying your instruction'

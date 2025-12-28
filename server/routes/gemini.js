@@ -8,6 +8,7 @@ import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fetch from 'node-fetch';
 import { getQuickBooksFields } from '../services/quickbooksSchemaExtractor.js';
+import { injectOAuthToken } from '../services/oauthTokenManager.js';
 
 const router = express.Router();
 
@@ -102,7 +103,7 @@ Return ONLY the JSON object, no additional text or explanation.
 }
 
 // Parse instruction using Gemini AI
-router.post('/parse', async (req, res) => {
+router.post('/parse', injectOAuthToken, async (req, res) => {
   try {
     const { instruction, realmId, accessToken, entity } = req.body;
     if (!instruction || !instruction.trim()) {
@@ -122,7 +123,10 @@ router.post('/parse', async (req, res) => {
     // 1. Fetch complete QuickBooks data for this entity
     let quickbooksData;
     try {
-      const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=SELECT * FROM ${entity}`;
+      // URL encode the query parameter - QuickBooks API requires this
+      const query = encodeURIComponent(`SELECT * FROM ${entity}`);
+      const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=${query}`;
+      
       const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -132,10 +136,31 @@ router.post('/parse', async (req, res) => {
       });
 
       if (!response.ok) {
-        throw new Error(`QuickBooks API error: ${response.status} ${response.statusText}`);
+        // Try to get more details from the error response
+        let errorDetails = `${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.Fault) {
+            errorDetails = errorData.Fault.Error?.[0]?.Message || errorDetails;
+            if (errorData.Fault.Error?.[0]?.Detail) {
+              errorDetails += `: ${errorData.Fault.Error[0].Detail}`;
+            }
+          }
+        } catch (e) {
+          // If we can't parse the error response, use the status text
+        }
+        
+        throw new Error(`QuickBooks API error: ${errorDetails}`);
       }
 
       const data = await response.json();
+      
+      // Check for QuickBooks API errors in the response
+      if (data.Fault) {
+        const faultMessage = data.Fault.Error?.[0]?.Message || 'Unknown QuickBooks API error';
+        throw new Error(`QuickBooks API error: ${faultMessage}`);
+      }
+      
       quickbooksData = data.QueryResponse && data.QueryResponse[entity];
       
       if (!quickbooksData || !quickbooksData.length) {
@@ -144,7 +169,14 @@ router.post('/parse', async (req, res) => {
     } catch (err) {
       return res.status(500).json({
         success: false,
-        error: 'Failed to fetch QuickBooks data: ' + err.message
+        error: 'Failed to fetch QuickBooks data: ' + err.message,
+        suggestions: [
+          'Verify your QuickBooks Realm ID is correct',
+          'Check that your OAuth access token is valid and not expired',
+          'Ensure the entity name is correct (e.g., Expense, Invoice, Bill, Payment)',
+          'Verify you have access to the QuickBooks company data',
+          'Check your internet connection'
+        ]
       });
     }
     

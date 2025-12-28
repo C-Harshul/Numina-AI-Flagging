@@ -82,7 +82,9 @@ function evaluateConditions(transaction, conditions) {
  * @returns {Promise<Array>} Array of transaction records
  */
 async function fetchQuickBooksData({ realmId, accessToken, entity }) {
-  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=SELECT * FROM ${entity}`;
+  // URL encode the query parameter - QuickBooks API requires this
+  const query = encodeURIComponent(`SELECT * FROM ${entity}`);
+  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=${query}`;
   
   const response = await fetch(url, {
     headers: {
@@ -93,10 +95,30 @@ async function fetchQuickBooksData({ realmId, accessToken, entity }) {
   });
 
   if (!response.ok) {
-    throw new Error(`QuickBooks API error: ${response.status} ${response.statusText}`);
+    // Try to get more details from the error response
+    let errorDetails = `${response.status} ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.Fault) {
+        errorDetails = errorData.Fault.Error?.[0]?.Message || errorDetails;
+        if (errorData.Fault.Error?.[0]?.Detail) {
+          errorDetails += `: ${errorData.Fault.Error[0].Detail}`;
+        }
+      }
+    } catch (e) {
+      // If we can't parse the error response, use the status text
+    }
+    throw new Error(`QuickBooks API error: ${errorDetails}`);
   }
 
   const data = await response.json();
+  
+  // Check for QuickBooks API errors in the response
+  if (data.Fault) {
+    const faultMessage = data.Fault.Error?.[0]?.Message || 'Unknown QuickBooks API error';
+    throw new Error(`QuickBooks API error: ${faultMessage}`);
+  }
+  
   const records = data.QueryResponse && data.QueryResponse[entity];
   
   if (!records) {
@@ -116,7 +138,9 @@ async function fetchQuickBooksData({ realmId, accessToken, entity }) {
  * @returns {Promise<object>} Complete QuickBooks API response
  */
 export async function getQuickBooksDataContext({ realmId, accessToken, entity }) {
-  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=SELECT * FROM ${entity}`;
+  // URL encode the query parameter - QuickBooks API requires this
+  const query = encodeURIComponent(`SELECT * FROM ${entity}`);
+  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=${query}`;
   
   const response = await fetch(url, {
     headers: {
@@ -127,10 +151,30 @@ export async function getQuickBooksDataContext({ realmId, accessToken, entity })
   });
 
   if (!response.ok) {
-    throw new Error(`QuickBooks API error: ${response.status} ${response.statusText}`);
+    // Try to get more details from the error response
+    let errorDetails = `${response.status} ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.Fault) {
+        errorDetails = errorData.Fault.Error?.[0]?.Message || errorDetails;
+        if (errorData.Fault.Error?.[0]?.Detail) {
+          errorDetails += `: ${errorData.Fault.Error[0].Detail}`;
+        }
+      }
+    } catch (e) {
+      // If we can't parse the error response, use the status text
+    }
+    throw new Error(`QuickBooks API error: ${errorDetails}`);
   }
 
   const data = await response.json();
+  
+  // Check for QuickBooks API errors in the response
+  if (data.Fault) {
+    const faultMessage = data.Fault.Error?.[0]?.Message || 'Unknown QuickBooks API error';
+    throw new Error(`QuickBooks API error: ${faultMessage}`);
+  }
+  
   return data;
 }
 

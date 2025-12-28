@@ -1,5 +1,6 @@
 import express from 'express';
 import { executeRule, executeMultipleRules, getQuickBooksDataContext } from '../services/ruleExecutor.js';
+import { injectOAuthToken } from '../services/oauthTokenManager.js';
 
 const router = express.Router();
 
@@ -7,7 +8,7 @@ const router = express.Router();
  * Execute a single rule against QuickBooks data
  * POST /api/execution/rule
  */
-router.post('/rule', async (req, res) => {
+router.post('/rule', injectOAuthToken, async (req, res) => {
   try {
     const { rule, realmId, accessToken, entity } = req.body;
 
@@ -66,7 +67,7 @@ router.post('/rule', async (req, res) => {
  * Execute multiple rules against QuickBooks data
  * POST /api/execution/rules
  */
-router.post('/rules', async (req, res) => {
+router.post('/rules', injectOAuthToken, async (req, res) => {
   try {
     const { rules, realmId, accessToken, entity } = req.body;
 
@@ -127,7 +128,7 @@ router.post('/rules', async (req, res) => {
  * Execute all active rules against QuickBooks data
  * POST /api/execution/all-active
  */
-router.post('/all-active', async (req, res) => {
+router.post('/all-active', injectOAuthToken, async (req, res) => {
   try {
     const { realmId, accessToken, entity } = req.body;
 
@@ -207,6 +208,37 @@ router.post('/all-active', async (req, res) => {
  * GET /api/execution/data-context
  */
 router.get('/data-context', async (req, res) => {
+  // For GET requests, we need to handle OAuth token injection differently
+  try {
+    const { realmId, accessToken } = req.query;
+    
+    // If accessToken is provided, use it
+    if (accessToken) {
+      return handleDataContextRequest(req, res);
+    }
+    
+    // If realmId is provided but no accessToken, try to get OAuth token
+    if (realmId && !accessToken) {
+      const { getAccessToken } = await import('../services/oauthTokenManager.js');
+      const { accessToken: oauthToken } = await getAccessToken(realmId);
+      req.query.accessToken = oauthToken;
+      return handleDataContextRequest(req, res);
+    }
+    
+    return res.status(400).json({
+      success: false,
+      error: 'realmId and accessToken (or OAuth connection) are required'
+    });
+  } catch (error) {
+    res.status(401).json({
+      success: false,
+      error: error.message,
+      requiresOAuth: true
+    });
+  }
+});
+
+async function handleDataContextRequest(req, res) {
   try {
     const { realmId, accessToken, entity } = req.query;
 
@@ -236,6 +268,6 @@ router.get('/data-context', async (req, res) => {
       details: error.message
     });
   }
-});
+}
 
 export default router; 

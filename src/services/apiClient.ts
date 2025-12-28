@@ -21,13 +21,18 @@ class ApiClient {
 
     try {
       const response = await fetch(url, config);
+      const data = await response.json().catch(() => ({}));
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        // Create an error object that preserves the full error response
+        const error = new Error(data.error || `HTTP error! status: ${response.status}`) as Error & { suggestions?: string[]; data?: any; success?: boolean };
+        error.suggestions = data.suggestions;
+        error.data = data;
+        error.success = data.success;
+        throw error;
       }
 
-      return await response.json();
+      return data;
     } catch (error) {
       console.error(`API request failed: ${endpoint}`, error);
       throw error;
@@ -109,39 +114,59 @@ class ApiClient {
     return this.request('/gemini/status');
   }
 
-  async parseInstruction(instruction: string, realmId: string, accessToken: string, entity: string) {
+  async parseInstruction(instruction: string, realmId: string, accessToken: string | null = null, entity: string) {
+    // If accessToken is not provided, OAuth will be used automatically on the backend
+    const body: any = { instruction, realmId, entity };
+    if (accessToken) {
+      body.accessToken = accessToken;
+    }
     return this.request('/gemini/parse', {
       method: 'POST',
-      body: JSON.stringify({ instruction, realmId, accessToken, entity }),
+      body: JSON.stringify(body),
     });
   }
 
   // Execution endpoints
-  async executeRule(rule: any, realmId: string, accessToken: string, entity: string) {
+  async executeRule(rule: any, realmId: string, accessToken: string | null = null, entity: string) {
+    const body: any = { rule, realmId, entity };
+    if (accessToken) {
+      body.accessToken = accessToken;
+    }
     return this.request('/execution/rule', {
       method: 'POST',
-      body: JSON.stringify({ rule, realmId, accessToken, entity }),
+      body: JSON.stringify(body),
     });
   }
 
-  async executeRules(rules: any[], realmId: string, accessToken: string, entity: string) {
+  async executeRules(rules: any[], realmId: string, accessToken: string | null = null, entity: string) {
+    const body: any = { rules, realmId, entity };
+    if (accessToken) {
+      body.accessToken = accessToken;
+    }
     return this.request('/execution/rules', {
       method: 'POST',
-      body: JSON.stringify({ rules, realmId, accessToken, entity }),
+      body: JSON.stringify(body),
     });
   }
 
-  async executeAllActiveRules(rules: any[], realmId: string, accessToken: string, entity: string) {
+  async executeAllActiveRules(rules: any[], realmId: string, accessToken: string | null = null, entity: string) {
+    const body: any = { rules, realmId, entity };
+    if (accessToken) {
+      body.accessToken = accessToken;
+    }
     return this.request('/execution/all-active', {
       method: 'POST',
-      body: JSON.stringify({ rules, realmId, accessToken, entity }),
+      body: JSON.stringify(body),
     });
   }
 
   // Get complete QuickBooks data context for analysis
-  async getDataContext(realmId: string, accessToken: string, entity: string) {
-    const queryParams = new URLSearchParams({ realmId, accessToken, entity });
-    return this.request(`/execution/data-context?${queryParams}`);
+  async getDataContext(realmId: string, accessToken: string | null = null, entity: string) {
+    const params = new URLSearchParams({ realmId, entity });
+    if (accessToken) {
+      params.set('accessToken', accessToken);
+    }
+    return this.request(`/execution/data-context?${params}`);
   }
 }
 
