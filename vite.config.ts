@@ -9,10 +9,10 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0', // Allow external connections
-    port: 5173,
+    port: 8080,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:8008',
         changeOrigin: true,
         secure: false,
       },

@@ -214,7 +214,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   if (hasQuickBooksOAuth) {
     console.log('🔐 QuickBooks OAuth: ✅ Client ID and Secret configured');
     console.log('   Environment:', process.env.QUICKBOOKS_ENVIRONMENT || 'sandbox (default)');
-    console.log('   Redirect URI:', process.env.QUICKBOOKS_REDIRECT_URI || 'http://localhost:3001/api/oauth/callback (default)');
+    console.log('   Redirect URI:', process.env.QUICKBOOKS_REDIRECT_URI || `http://localhost:${PORT}/callback (default)`);
   } else {
     console.log('🔐 QuickBooks OAuth: ❌ Client ID or Secret not found');
     console.log('   Add QUICKBOOKS_CLIENT_ID and QUICKBOOKS_CLIENT_SECRET to your server/.env file');
